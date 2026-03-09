@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minnesota Snow Depth</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f8f9fa;
+      color: #212529;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 680px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    header { text-align: center; }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #1a4480;
+    }
+    header p {
+      font-size: 0.85rem;
+      color: #6c757d;
+      margin-top: 0.25rem;
+    }
+
+    /* --- Slider groups --- */
+    .slider-group { width: 100%; }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.4rem;
+    }
+    .slider-header label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #495057;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .slider-header .value {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1a4480;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #dee2e6;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #1a4480;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #1a4480;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+
+    .slider-ticks {
+      position: relative;
+      height: 1.2rem;
+      margin-top: 0.3rem;
+      padding: 0 10px; /* align with slider thumb centre */
+    }
+    .slider-ticks span {
+      position: absolute;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      color: #adb5bd;
+      white-space: nowrap;
+    }
+
+    /* --- Map --- */
+    .map-container { text-align: center; width: 100%; }
+    .map-container img {
+      width: 100%;
+      max-width: 620px;
+      height: auto;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      background: #e9ecef;        /* placeholder while loading */
+      min-height: 200px;
+    }
+    .map-date {
+      margin-top: 0.6rem;
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+
+    /* --- Footer --- */
+    footer {
+      margin-top: 1rem;
+      font-size: 0.75rem;
+      color: #adb5bd;
+      text-align: center;
+    }
+    footer a { color: #6c757d; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Minnesota Snow Depth</h1>
+      <p>Weekly maps from the MN DNR State Climatology Office</p>
+    </header>
+
+    <!-- Week-within-season slider -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <label for="week-slider">Week</label>
+        <span class="value" id="week-value"></span>
+      </div>
+      <input type="range" id="week-slider" min="0" max="0" value="0">
+      <div class="slider-ticks" id="week-ticks"></div>
+    </div>
+
+    <!-- Winter season slider -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <label for="year-slider">Winter</label>
+        <span class="value" id="year-value"></span>
+      </div>
+      <input type="range" id="year-slider" min="0" max="0" value="0">
+      <div class="slider-ticks" id="year-ticks"></div>
+    </div>
+
+    <!-- Map display -->
+    <div class="map-container">
+      <img id="map-image" alt="Snow depth map" src="">
+      <div class="map-date" id="map-date"></div>
+    </div>
+
+    <footer>
+      Data: <a href="https://www.dnr.state.mn.us/climate/snowmap/index.html"
+               target="_blank" rel="noopener">MN DNR Climate Office</a>
+    </footer>
+  </div>
+
+  <script src="data/manifest.js"></script>
+  <script>
+    /* ───── state ───── */
+    const seasons = Object.keys(MANIFEST).sort();
+    let seasonIdx = seasons.length - 1;   // start on latest season
+    let mapIdx;                            // index within current season
+    let targetSD = null;                   // anchored season-day for cross-year matching
+
+    /* ───── DOM refs ───── */
+    const weekSlider  = document.getElementById("week-slider");
+    const yearSlider  = document.getElementById("year-slider");
+    const weekValue   = document.getElementById("week-value");
+    const yearValue   = document.getElementById("year-value");
+    const weekTicks   = document.getElementById("week-ticks");
+    const yearTicks   = document.getElementById("year-ticks");
+    const mapImage    = document.getElementById("map-image");
+    const mapDate     = document.getElementById("map-date");
+
+    /* ───── helpers ───── */
+
+    function currentMaps() {
+      return MANIFEST[seasons[seasonIdx]];
+    }
+
+    /** Days since Nov 1 of the season's starting year. */
+    function seasonDay(dateStr) {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      const startYear = m >= 11 ? y : y - 1;
+      const nov1 = new Date(startYear, 10, 1);
+      return Math.round((date - nov1) / 86400000);
+    }
+
+    function formatDate(dateStr) {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric"
+      });
+    }
+
+    function formatShortDate(dateStr) {
+      const [, m, d] = dateStr.split("-").map(Number);
+      return new Date(2000, m - 1, d).toLocaleDateString("en-US", {
+        month: "short", day: "numeric"
+      });
+    }
+
+    function seasonLabel(trailingYear) {
+      return (trailingYear - 1) + "–" + trailingYear;
+    }
+
+    /* ───── rendering ───── */
+
+    function renderYearTicks() {
+      yearTicks.innerHTML = "";
+      const n = seasons.length;
+      seasons.forEach((s, i) => {
+        // Show every label if ≤ 6 seasons, otherwise every other
+        if (n > 6 && i % 2 !== 0 && i !== n - 1) return;
+        const pct = n === 1 ? 50 : (i / (n - 1)) * 100;
+        const tick = document.createElement("span");
+        tick.style.left = pct + "%";
+        tick.textContent = "'" + s.slice(2);
+        yearTicks.appendChild(tick);
+      });
+    }
+
+    function renderWeekTicks() {
+      weekTicks.innerHTML = "";
+      const maps = currentMaps();
+      const n = maps.length;
+      const seen = new Set();
+      const monthOrder = [11, 12, 1, 2, 3, 4, 5];
+
+      maps.forEach((m, i) => {
+        const month = parseInt(m.date.split("-")[1], 10);
+        if (!monthOrder.includes(month) || seen.has(month)) return;
+        seen.add(month);
+        const pct = n === 1 ? 50 : (i / (n - 1)) * 100;
+        const tick = document.createElement("span");
+        tick.style.left = pct + "%";
+        tick.textContent = new Date(2000, month - 1, 1)
+          .toLocaleDateString("en-US", { month: "short" });
+        weekTicks.appendChild(tick);
+      });
+    }
+
+    function updateDisplay() {
+      const maps = currentMaps();
+      const map = maps[mapIdx];
+      const season = seasons[seasonIdx];
+
+      mapImage.src  = "data/" + map.file;
+      mapImage.alt  = "Snow depth map – " + formatDate(map.date);
+      mapDate.textContent = formatDate(map.date);
+
+      weekValue.textContent = formatShortDate(map.date);
+      yearValue.textContent = seasonLabel(parseInt(season, 10));
+    }
+
+    /* ───── slider events ───── */
+
+    function onWeekInput() {
+      mapIdx = parseInt(weekSlider.value, 10);
+      // Anchor the season-day so year slider matches against this position
+      targetSD = seasonDay(currentMaps()[mapIdx].date);
+      updateDisplay();
+    }
+
+    function onYearInput() {
+      // Always match against the anchored target, not the current (drifting) map
+      if (targetSD === null) {
+        targetSD = seasonDay(currentMaps()[mapIdx].date);
+      }
+
+      seasonIdx = parseInt(yearSlider.value, 10);
+      const maps = currentMaps();
+
+      // Find the map closest to the anchored season-day
+      let bestIdx = 0, bestDiff = Infinity;
+      maps.forEach((m, i) => {
+        const diff = Math.abs(seasonDay(m.date) - targetSD);
+        if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+      });
+
+      mapIdx = bestIdx;
+      weekSlider.max = maps.length - 1;
+      weekSlider.value = mapIdx;
+
+      renderWeekTicks();
+      updateDisplay();
+    }
+
+    weekSlider.addEventListener("input", onWeekInput);
+    yearSlider.addEventListener("input", onYearInput);
+
+    /* ───── init ───── */
+
+    (function init() {
+      // Year slider
+      yearSlider.min   = 0;
+      yearSlider.max   = seasons.length - 1;
+      yearSlider.value = seasonIdx;
+
+      // Week slider — start on most recent map in the season
+      const maps = currentMaps();
+      mapIdx = maps.length - 1;
+      weekSlider.min   = 0;
+      weekSlider.max   = maps.length - 1;
+      weekSlider.value = mapIdx;
+      targetSD = seasonDay(maps[mapIdx].date);
+
+      renderYearTicks();
+      renderWeekTicks();
+      updateDisplay();
+    })();
+  </script>
+</body>
+</html>

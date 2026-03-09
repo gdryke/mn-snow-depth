@@ -1,0 +1,44 @@
+name: Update Snow Maps
+
+on:
+  schedule:
+    # Run every Saturday at 00:00 UTC (Friday evening in US timezones)
+    - cron: '0 0 * * 6'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  update-maps:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download new maps
+        run: python3 download_maps.py
+      
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [[ -n $(git status --porcelain data/) ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push if changes
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/
+          git commit -m "Update snow depth maps - $(date -u +'%Y-%m-%d')"
+          git push
