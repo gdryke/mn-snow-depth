@@ -2,6 +2,8 @@
 
 This repository tracks and archives weekly snow depth maps for Minnesota, published by the [Minnesota DNR State Climatology Office](https://www.dnr.state.mn.us/climate/snowmap/index.html).
 
+[GitHub Page Link](https://gdryke.github.io/mn-snow-depth/)
+
 ## About the Maps
 
 Each Thursday during the cold season, the MN DNR State Climatology Office produces maps depicting:
@@ -58,7 +60,7 @@ The script will:
 
 ## Future Plans
 
-- Create a GitHub Pages site to display the maps
+- [x] Create a GitHub Pages site to display the maps
 - Add visualization and comparison tools
 - Provide historical trend analysis
 
