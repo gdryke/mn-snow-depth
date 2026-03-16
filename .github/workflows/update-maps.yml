@@ -5,7 +5,8 @@ on:
     # Run every Saturday at 00:00 UTC (Friday evening in US timezones)
     - cron: '0 0 * * 6'
   workflow_dispatch:  # Allow manual triggering
-
+permissions:
+  content: write
 jobs:
   update-maps:
     runs-on: ubuntu-latest
