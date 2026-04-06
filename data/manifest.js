@@ -871,6 +871,10 @@ const MANIFEST = {
     {
       "date": "2026-03-26",
       "file": "2026-03-26_depth.jpg"
+    },
+    {
+      "date": "2026-04-02",
+      "file": "2026-04-02_depth.jpg"
     }
   ]
 };
