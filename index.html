@@ -95,7 +95,8 @@
       position: relative;
       height: 1.2rem;
       margin-top: 0.3rem;
-      padding: 0 10px; /* align with slider thumb centre */
+      /* 36px button + 0.5rem gap on each side; +10px for thumb centre */
+      padding: 0 calc(36px + 0.5rem + 10px);
     }
     .slider-ticks span {
       position: absolute;
@@ -122,6 +123,35 @@
       font-weight: 500;
     }
 
+    /* --- Nav buttons --- */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .slider-row input[type="range"] { flex: 1; min-width: 0; }
+
+    .nav-btn {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: #e9ecef;
+      color: #495057;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .nav-btn:hover { background: #dee2e6; }
+    .nav-btn:active { background: #ced4da; }
+
     /* --- Footer --- */
     footer {
       margin-top: 1rem;
@@ -145,7 +175,11 @@
         <label for="week-slider">Week</label>
         <span class="value" id="week-value"></span>
       </div>
-      <input type="range" id="week-slider" min="0" max="0" value="0">
+      <div class="slider-row">
+        <button type="button" class="nav-btn" id="week-prev" aria-label="Previous week">◀</button>
+        <input type="range" id="week-slider" min="0" max="0" value="0">
+        <button type="button" class="nav-btn" id="week-next" aria-label="Next week">▶</button>
+      </div>
       <div class="slider-ticks" id="week-ticks"></div>
     </div>
 
@@ -155,7 +189,11 @@
         <label for="year-slider">Winter</label>
         <span class="value" id="year-value"></span>
       </div>
-      <input type="range" id="year-slider" min="0" max="0" value="0">
+      <div class="slider-row">
+        <button type="button" class="nav-btn" id="year-prev" aria-label="Previous winter">◀</button>
+        <input type="range" id="year-slider" min="0" max="0" value="0">
+        <button type="button" class="nav-btn" id="year-next" aria-label="Next winter">▶</button>
+      </div>
       <div class="slider-ticks" id="year-ticks"></div>
     </div>
 
@@ -306,6 +344,45 @@
 
     weekSlider.addEventListener("input", onWeekInput);
     yearSlider.addEventListener("input", onYearInput);
+
+    /* ───── nav-button helpers ───── */
+
+    function stepWeek(delta) {
+      const maps = currentMaps();
+      const next = mapIdx + delta;
+      if (next < 0 || next >= maps.length) return;
+      mapIdx = next;
+      weekSlider.value = mapIdx;
+      targetSD = seasonDay(maps[mapIdx].date);
+      updateDisplay();
+    }
+
+    function stepYear(delta) {
+      const next = seasonIdx + delta;
+      if (next < 0 || next >= seasons.length) return;
+      if (targetSD === null) {
+        targetSD = seasonDay(currentMaps()[mapIdx].date);
+      }
+      yearSlider.value = next;
+      onYearInput();
+    }
+
+    document.getElementById("week-prev").addEventListener("click", () => stepWeek(-1));
+    document.getElementById("week-next").addEventListener("click", () => stepWeek(1));
+    document.getElementById("year-prev").addEventListener("click", () => stepYear(-1));
+    document.getElementById("year-next").addEventListener("click", () => stepYear(1));
+
+    /* ───── keyboard shortcuts (A/D, Shift+A/Shift+D) ───── */
+
+    document.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      const key = e.key.toLowerCase();
+      if (key === "a") {
+        e.shiftKey ? stepYear(-1) : stepWeek(-1);
+      } else if (key === "d") {
+        e.shiftKey ? stepYear(1) : stepWeek(1);
+      }
+    });
 
     /* ───── init ───── */
 
