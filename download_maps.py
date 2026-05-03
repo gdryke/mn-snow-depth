@@ -95,18 +95,38 @@ def extract_map_links(html):
       - snowmap_180322.html  (older, relative)
       - snowmap180322.html   (older, relative, no separator)
       - snowmap-181227.html  (older, relative, dash separator)
-    """
-    # Match any <a> with an href containing "snowmap" pointing to an .html page,
-    # but exclude the index page, explanation page, etc.
-    pattern = r'<a\s+href="([^"]*snowmap[^"]*\.html)"[^>]*>([^<]+)</a>'
-    matches = re.findall(pattern, html, re.IGNORECASE)
+      - https://images.dnr.state.mn.us/…/S260416.jpg  (direct image, newest report)
 
-    INDEX_PAGE_URL = f"{BASE_URL}/climate/snowmap/index.html"
+    Also parses season headers like ``<strong>2025-2026</strong>`` so each
+    link carries the DNR-designated season label.
+    """
+    # Build a list of (character-position, season_label) from headers like
+    # <strong>2025-2026</strong> so we can associate each link with a season.
+    season_headers = []
+    for m in re.finditer(r'<strong>(\d{4})-(\d{4})</strong>', html):
+        season_headers.append((m.start(), m.group(2)))  # trailing year
+
+    def season_for_pos(pos):
+        """Return the trailing-year season string for a given char position."""
+        current = None
+        for hdr_pos, label in season_headers:
+            if hdr_pos > pos:
+                break
+            current = label
+        return current
+
+    # Match any <a> with an href containing "snowmap" pointing to .html, .jpg,
+    # or .gif — but exclude the index page, explanation page, etc.
+    pattern = r'<a\s+href="([^"]*snowmap[^"]*\.(?:html|jpg|gif))"[^>]*>([^<]+)</a>'
+    matches = list(re.finditer(pattern, html, re.IGNORECASE))
 
     map_links = []
     seen_dates = set()
 
-    for href, link_text in matches:
+    for match in matches:
+        href = match.group(1)
+        link_text = match.group(2)
+
         # Skip non-map pages
         if "explanation" in href or href.endswith("index.html"):
             continue
@@ -128,10 +148,15 @@ def extract_map_links(html):
         else:
             full_url = f"{BASE_URL}/climate/snowmap/{href}"
 
+        # Detect whether this link points directly to an image
+        is_direct_image = bool(re.search(r'\.(jpg|gif)$', href, re.IGNORECASE))
+
         map_links.append({
             'url': full_url,
             'date': date_obj,
             'date_str': date_str,
+            'direct_image': is_direct_image,
+            'season': season_for_pos(match.start()),
         })
 
     return map_links
@@ -187,6 +212,29 @@ def main():
         date_str = map_info['date_str']
         print(f"\nProcessing {date_str}...")
         
+        if map_info.get('direct_image'):
+            # Link points directly to the image file — download without
+            # fetching an intermediate HTML page.
+            ext = map_info['url'].rsplit('.', 1)[-1]
+            local_filename = f"{date_str}_depth.{ext}"
+            local_path = DATA_DIR / local_filename
+
+            if local_path.exists():
+                print(f"  ✓ Already exists: {local_filename}")
+                skipped_count += 1
+                continue
+
+            print(f"  ⬇ Downloading depth map (direct link)...")
+            if download_image(map_info['url'], local_path):
+                if ext == 'jpg':
+                    crop_whitespace(local_path)
+                print(f"  ✓ Saved: {local_filename}")
+                downloaded_count += 1
+            else:
+                print(f"  ✗ Failed to download: {local_filename}")
+                error_count += 1
+            continue
+
         # Fetch the individual map page
         page_html = fetch_page(map_info['url'])
         if not page_html:
